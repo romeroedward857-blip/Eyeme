@@ -8,8 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -21,9 +20,9 @@ jobs:
           python-version: "3.11"
 
       - name: Setup Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
       - name: Install system dependencies
@@ -33,28 +32,46 @@ jobs:
             git \
             zip \
             unzip \
-            openjdk-17-jdk \
-            python3-pip \
+            wget \
+            curl \
+            build-essential \
             autoconf \
             automake \
             libtool \
+            libtool-bin \
             pkg-config \
-            zlib1g-dev \
-            libncurses-dev \
-            libtinfo6 \
-            cmake \
+            gettext \
+            libltdl-dev \
             libffi-dev \
             libssl-dev \
-            gettext
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            cmake
+
+      - name: Prepare Autotools
+        run: |
+          set -eux
+
+          autoreconf --version
+          autoconf --version
+          automake --version
+          libtoolize --version
+
+          sudo libtoolize --force --copy
 
       - name: Install Buildozer and Cython
         run: |
-          python -m pip install --upgrade pip setuptools
-          pip install buildozer==1.6.0
-          pip install "cython==0.29.37"
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "Cython==0.29.37"
+          python -m pip install "buildozer==1.5.0"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+          yes | sdkmanager --licenses || true
 
       - name: Accept Android SDK licenses
         run: |
@@ -64,44 +81,55 @@ jobs:
         run: |
           sdkmanager \
             "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "cmdline-tools;latest"
 
       - name: Verify Android SDK
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          sdkmanager --list | head -100
-          echo "SDK verificado"
+          sdkmanager --list | head -50
+          adb version || true
 
       - name: Show project files
         run: |
-          echo "Contenido del proyecto:"
-          find . -maxdepth 2 -type f | sort
+          echo "===== PROJECT ====="
+          find . -maxdepth 3 -type f | sort
 
       - name: Check buildozer.spec
         run: |
-          if [ ! -f buildozer.spec ]; then
-            echo "ERROR: No existe buildozer.spec"
-            exit 1
-          fi
-
-          echo "buildozer.spec encontrado:"
+          test -f buildozer.spec
+          echo "===== BUILDOZER SPEC ====="
           cat buildozer.spec
 
-      - name: Build APK
+      - name: Clean Buildozer cache
         run: |
-          yes | buildozer android debug
+          rm -rf .buildozer
+          rm -rf bin
+          mkdir -p bin
+
+      - name: Build APK
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          BUILDOZER_WARN_ON_ROOT: "0"
+        run: |
+          set -eux
+
+          buildozer android clean || true
+
+          buildozer -v android debug
 
       - name: Find APK
+        if: success()
         run: |
-          echo "Buscando APK generado..."
+          echo "===== APK FILES ====="
           find . -type f -name "*.apk" -print
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Eyeme-APK
           path: |
             bin/*.apk
-          if-no-files-found: error
