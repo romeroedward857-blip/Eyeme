@@ -1,40 +1,68 @@
-name: Build Anomaly Scanner APK
-
+name: Build APK
 
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches:
+      - main
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Descargar proyecto
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v7
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
-      - name: Dependencias Linux
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev \
+            libssl-dev
 
-      - name: Instalar Buildozer
+      - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install buildozer "cython<3.4"
+          pip install --upgrade buildozer cython
 
-      - name: Compilar APK
-        run: buildozer -v android debug
+      - name: Prepare Android SDK
+        run: |
+          mkdir -p "$HOME/.buildozer/android/platform/android-sdk/licenses"
 
-      - name: Publicar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: anomaly-scanner-v2.4-apk
-          path: bin/*.apk
-          if-no-files-found: error
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Show Android tools
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list | head -100
+          echo "Ver
