@@ -406,7 +406,7 @@ class Scanner(App):
             )
 
     def save(self, score, level, active):
-        csv_append(CSV_FILE,
+        append_scv(CSV_FILE,
             ["timestamp","score","level","active"] + list(SENSOR_NAMES) +
             ["latitude","longitude","accuracy"],
             [now(), f"{score:.2f}", level, "|".join(active)] +
