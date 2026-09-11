@@ -1,135 +1,31 @@
-name: Build APK
+- name: Install Android SDK packages
+  shell: bash
+  run: |
+    set -e
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+    export ANDROID_HOME="${ANDROID_SDK_ROOT}"
+    export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools/bin:${PATH}"
 
-jobs:
-  build:
-    runs-on: ubuntu-24.04
+    echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+    echo "ANDROID_HOME=${ANDROID_HOME}"
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    echo "Buscando sdkmanager..."
+    find "${ANDROID_SDK_ROOT}" -type f -name sdkmanager -print
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    SDKMANAGER="$(find "${ANDROID_SDK_ROOT}" -type f -name sdkmanager -print -quit)"
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+    if [ -z "${SDKMANAGER}" ]; then
+      echo "ERROR: sdkmanager no encontrado"
+      exit 1
+    fi
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            wget \
-            curl \
-            build-essential \
-            autoconf \
-            automake \
-            libtool \
-            libtool-bin \
-            pkg-config \
-            gettext \
-            libltdl-dev \
-            libffi-dev \
-            libssl-dev \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            cmake
+    echo "sdkmanager encontrado en: ${SDKMANAGER}"
 
-      - name: Prepare Autotools
-        run: |
-          set -eux
+    chmod +x "${SDKMANAGER}"
 
-          autoreconf --version
-          autoconf --version
-          automake --version
-          libtoolize --version
+    yes | "${SDKMANAGER}" --licenses || true
 
-          sudo libtoolize --force --copy
-
-      - name: Install Buildozer and Cython
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.37"
-          python -m pip install "buildozer==1.5.0"
-
-      - name: Setup Android SDK
-        run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-
-          yes | sdkmanager --licenses || true
-
-      - name: Accept Android SDK licenses
-        run: |
-          yes | sdkmanager --licenses || true
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "cmdline-tools;latest"
-
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          sdkmanager --list | head -50
-          adb version || true
-
-      - name: Show project files
-        run: |
-          echo "===== PROJECT ====="
-          find . -maxdepth 3 -type f | sort
-
-      - name: Check buildozer.spec
-        run: |
-          test -f buildozer.spec
-          echo "===== BUILDOZER SPEC ====="
-          cat buildozer.spec
-
-      - name: Clean Buildozer cache
-        run: |
-          rm -rf .buildozer
-          rm -rf bin
-          mkdir -p bin
-
-      - name: Build APK
-        env:
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-          BUILDOZER_WARN_ON_ROOT: "0"
-        run: |
-          set -eux
-
-          buildozer android clean || true
-
-          buildozer -v android debug
-
-      - name: Find APK
-        if: success()
-        run: |
-          echo "===== APK FILES ====="
-          find . -type f -name "*.apk" -print
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Eyeme-APK
-          path: |
-            bin/*.apk
+    "${SDKMANAGER}" \
+      "platform-tools" \
+      "platforms;android-33" \
+      "build-tools;33.0.2"
